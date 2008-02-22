@@ -1,3 +1,12 @@
+Release Name: 0.30
+===========================
+* Expanded pod / kwalitee improvments
+* You can now access the Audio::M4P::Quicktime object
+
+Release Name: 0.29
+===========================
+* Tree::Simple now required
+
 Release Name: 0.28
 ===========================
 * Split off from Music::Tag distribution
