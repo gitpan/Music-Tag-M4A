@@ -1,59 +1,42 @@
 package Music::Tag::M4A;
-our $VERSION = 0.30;
-
-# Copyright (c) 2007 Edward Allen III. Some rights reserved.
-#
-## This program is free software; you can redistribute it and/or
-## modify it under the terms of the Artistic License, distributed
-## with Perl.
-#
-
-=pod
-
-=head1 NAME
-
-Music::Tag::M4A - Plugin module for Music::Tag to get information from Apple QuickTime headers. 
-
-=head1 SYNOPSIS
-
-	use Music::Tag
-
-	my $filename = "/var/lib/music/artist/album/track.m4a";
-
-	my $info = Music::Tag->new($filename, { quiet => 1 }, "M4A");
-
-	$info->get_info();
-	   
-	print "Artist is ", $info->artist;
-
-=head1 DESCRIPTION
-
-Music::Tag::M4A is used to read  header information from QuickTime MP4 contonainers. It uses Audio::M4P::QuickTime and MP4::Info.
-
-It is not currently able to write M4A tags.  Audio::M4P::QuickTime can write these tags, but iTunes has trouble reading them after
-they have been writen.  Setting the option "write_m4a" will enable some tags to be writen, but iTunes will have problems!
-
-=head1 REQUIRED VALUES
-
-No values are required (except filename, which is usually provided on object creation).
-
-=head1 SET VALUES
-
-=cut
-
 use strict;
+use warnings;
+our $VERSION = .40_01;
+
+# Copyright (c) 2007,2010 Edward Allen III. Some rights reserved.
+
+#
+# You may distribute under the terms of either the GNU General Public
+# License or the Artistic License, as specified in the README file.
+#
+
+
+use Music::Tag::Generic;
 use Music::Tag;
 use Audio::M4P::QuickTime;
 use MP4::Info;
-our @ISA = qw(Music::Tag::Generic);
+use base qw(Music::Tag::Generic);
 
 sub _default_options {
 	{ write_m4a => 0 }
 }
 
+sub set_values {
+	return qw(  album artist bitrate comment compilation composer
+				copyright disc duration encoder filename frequency genre
+				lyrics picture releasedate tempo title
+				totaldiscs totaltracks track year);
+}
+
+sub saved_values {
+	return qw(  album artist bitrate comment compilation composer
+				disc encoder frequency genre get_info lyrics 
+				releasedate tempo title totaldiscs totaltracks track year);
+}
+
 sub get_tag {
 	my $self = shift;
-	$self->get_tag_mp4_info;
+	#$self->get_tag_mp4_info;
 	$self->get_tag_qt_info;
 	return $self;
 }
@@ -78,24 +61,11 @@ sub get_tag_qt_info {
     my $tinfo    = $self->qt->iTMS_MetaInfo;
 	my $minfo    = $self->qt->GetMP4Info;
 	my $ginfo    = $self->qt->GetMetaInfo;
-    $self->info->album( $ginfo->{ALB} );
-    $self->info->artist( $ginfo->{ART} );
+	
+    $self->info->album( $ginfo->{ALBUM} );
+    $self->info->artist( $ginfo->{ARTIST} );
 	my $date = $tinfo->{year} || $ginfo->{DAY};
 	$date =~ s/T.*$//;
-
-=pod
-
-=over 4
-
-=item B<artist, album >
-
-=item B<disc, totaldiscs, tempo, encoder, title, composer>
-
-=item B<copyright, track, totaltracks, comment, lyrics>
-
-=item B<bitrate, duration, picture>
-
-=cut
 
 	$self->info->releasedate($date);
 
@@ -170,16 +140,24 @@ sub set_tag {
 		return $self;
 	}
 
-	unless ($ginfo->{ALB} eq $self->info->album) {
-		$self->status("Storing new tag info for album");
-		$self->qt->SetMetaInfo(ALB => $self->info->album, 1, 'day');
-		$changed++;
-    }
-	unless ($ginfo->{ART} eq $self->info->artist) {
-		$self->status("Storing new tag info for artist");
-		$self->qt->SetMetaInfo(ART => $self->info->artist, 1 , 'nam');
-		$changed++;
-    }
+	my %simple_map = (
+		album => 'album',
+		artist => 'artist',
+		title => 'title',
+		comment => 'comment',
+		genre => 'genre_as_text',
+		track => 'track',
+		totaltracks => 'total',
+		year => 'year',
+	);
+
+	while (my ($mtm,$qtm) = each %simple_map) {
+		unless ($self->qt->$qtm eq $self->info->$mtm) {
+			$self->status("Storing new tag info for $mtm");
+			$self->qt->$qtm($self->info->$mtm);
+			$changed++;
+		}
+	}
 	unless ($ginfo->{TMPO} eq $self->info->tempo) {
 		$self->status("Storing new tag info for tempo");
 		$self->qt->SetMetaInfo(TMPO => $self->info->tempo, 1);
@@ -187,22 +165,12 @@ sub set_tag {
     }
 	unless ($ginfo->{TOO} eq $self->info->encoder) {
 		$self->status("Storing new tag info for encoder");
-		$self->qt->SetMetaInfo(TOO => $self->info->encoder, 1, 'covr');
-		$changed++;
-    }
-	unless ($ginfo->{NAM} eq $self->info->title) {
-		$self->status("Storing new tag info for title");
-		$self->qt->SetMetaInfo(NAM => $self->info->title, 1, 'wrt');
+		$self->qt->SetMetaInfo(TOO => $self->info->encoder, 1);
 		$changed++;
     }
 	unless ($ginfo->{WRT} eq $self->info->composer) {
 		$self->status("Storing new tag info for composer");
-		$self->qt->SetMetaInfo(WRT => $self->info->composer, 1, 'alb');
-		$changed++;
-    }
-	unless ($ginfo->{COMMENT} eq $self->info->comment) {
-		$self->status("Storing new tag info for comment");
-		$self->qt->SetMetaInfo(COMMENT => $self->info->comment, 1);
+		$self->qt->SetMetaInfo(WRT => $self->info->composer, 1);
 		$changed++;
     }
 	unless ($ginfo->{LYRICS} eq $self->info->lyrics) {
@@ -225,43 +193,98 @@ sub close {
 	delete $self->{_qt};
 }
 
+
+1;
+
+# vim: tabstop=4
+__END__
+=pod
+
+=head1 NAME
+
+Music::Tag::M4A - Plugin module for Music::Tag to get information from Apple QuickTime headers. 
+
+=head1 SYNOPSIS
+
+	use Music::Tag
+
+	my $filename = "/var/lib/music/artist/album/track.m4a";
+
+	my $info = Music::Tag->new($filename, { quiet => 1 }, "M4A");
+
+	$info->get_info();
+	   
+	print "Artist is ", $info->artist;
+
+=head1 DESCRIPTION
+
+Music::Tag::M4A is used to read header information from QuickTime MP4 containers. It uses Audio::M4P::QuickTime and MP4::Info.
+
+It is not currently able to write M4A tags (safely). Audio::M4P::QuickTime can write these tags, but iTunes has trouble reading them after
+they have been written. Setting the option "write_m4a" will enable some tags to be written, but iTunes will have problems!
+
+=head1 REQUIRED DATA VALUES
+
+No values are required (except filename, which is usually provided on object creation).
+
+=head1 SET DATA VALUES
+
+=pod
+
+=over 4
+
+=item B<artist, album >
+
+=item B<disc, totaldiscs, tempo, encoder, title, composer>
+
+=item B<copyright, track, totaltracks, comment, lyrics>
+
+=item B<bitrate, duration, picture>
+
 =back
 
 =head1 METHODS
 
 =over 4
 
-=item default_options
+=item B<default_options()>
 
 Returns the default options for the plugin.  
 
-=item set_tag
+=item B<set_tag()>
 
 Save object back to MPEG4 container. THIS IS DANGEROUS. Requires write_m4a be set to true.
 
-=item get_tag
+=item B<get_tag()>
 
 Load information from MPEG4 container. 
 
-=item get_tag_qt_info 
+=item B<set_values()>
+
+A list of values that can be set by this module.
+
+=item B<saved_values()>
+
+A list of values that can be saved by this module.
+
+=item B<get_tag_qt_info()> 
 
 Load information using Audio::M4P::QuickTime
 
-=item get_tag_mp4_info
+=item B<get_tag_mp4_info()>
 
 Load information using MP4::Info
 
-=item close
+=item B<close()>
 
 Close the file and destroy the Audio::M4P::QuickTime object. As this can be large, do this soon after running get_tag
 if you do not intend to write back to the file ever.
 
-=item qt
+=item B<qt()>
 
 Returns the Audio::M4P::QuickTime object
 
 =back
-
 
 =head1 OPTIONS
 
@@ -269,7 +292,7 @@ Returns the Audio::M4P::QuickTime object
 
 =item B<write_m4a>
 
-Set to true to allow some tags to be writen to disc.  Not recommended.
+Set to true to allow some tags to be written to disc.  Not recommended.
 
 =back
 
@@ -277,14 +300,17 @@ Set to true to allow some tags to be writen to disc.  Not recommended.
 
 M4A Tags are error-prone. Writing tags is not reliable.
 
-=head1 SEE ALSO INCLUDED
-
-L<Music::Tag>, L<Music::Tag::Amazon>, L<Music::Tag::File>, L<Music::Tag::FLAC>, L<Music::Tag::Lyrics>,
-L<Music::Tag::MP3>, L<Music::Tag::MusicBrainz>, L<Music::Tag::OGG>, L<Music::Tag::Option>,
-
 =head1 SEE ALSO
 
-L<Audio::M4P::QuickTime>, L<MP4::Info>
+L<Audio::M4P::QuickTime>, L<MP4::Info>, L<Music::Tag>
+
+=head1 SOURCE
+
+Source is available at github: L<http://github.com/riemann42/Music-Tag-M4A|http://github.com/riemann42/Music-Tag-M4A>.
+
+=head1 BUG TRACKING
+
+Please use github for bug tracking: L<http://github.com/riemann42/Music-Tag-M4A/issues|http://github.com/riemann42/Music-Tag-M4A/issues>.
 
 =head1 AUTHOR 
 
@@ -292,18 +318,32 @@ Edward Allen III <ealleniii _at_ cpan _dot_ org>
 
 =head1 LICENSE
 
-This program is free software; you can redistribute it and/or
-modify it under the terms of the Artistic License, distributed
-with Perl.
+This program is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself, either:
+
+a) the GNU General Public License as published by the Free
+Software Foundation; either version 1, or (at your option) any
+later version, or
+
+b) the "Artistic License" which comes with Perl.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See either
+the GNU General Public License or the Artistic License for more details.
+
+You should have received a copy of the Artistic License with this
+Kit, in the file named "Artistic".  If not, I'll be glad to provide one.
+
+You should also have received a copy of the GNU General Public License
+along with this program in the file named "Copying". If not, write to the
+Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor,
+Boston, MA 02110-1301, USA or visit their web page on the Internet at
+http://www.gnu.org/copyleft/gpl.html.
+
 
 =head1 COPYRIGHT
 
 Copyright (c) 2007 Edward Allen III. Some rights reserved.
 
 
-=cut
-
-
-1;
-
-# vim: tabstop=4
